@@ -1,10 +1,14 @@
 var express = require('express');
 var app = express();
+var logger = require('morgan');
 
 var router = require('./router');
 
 var port = 3000;
 
+
+// error logging
+app.use(logger('dev'));
 
 // set view engine
 app.set('view engine', 'jade');

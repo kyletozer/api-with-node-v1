@@ -1,129 +1,126 @@
 var express = require('express');
 var router = express.Router();
-
-var Twit = require('twit');
-var T = new Twit(require('./config'));
 var utils = require('./utils');
 
 
 router.get('/', function(req, res, next) {
 
-	function apiGet(endpoint, options) {
-		return new Promise(function(resolve, reject) {
-			T.get(endpoint, options, function(error, data, response) {
-					if (error) {
-						return reject(error)
-					}
-					resolve(data);
-				});
-		});
-	}
+  var date = new Date().toUTCString();
 
-  function timeSincePost(datePosted, dateViewed){
+  var locals = {
+    messages: [],
+    latestChat: null
+  };
 
-    function toTimeStamp(dateString){
-      return Date.parse(dateString) / 1000;
-    }
-
-    datePosted = toTimeStamp(datePosted);
-    dateViewed = toTimeStamp(dateViewed);
-
-    var timeElapsed = dateViewed - datePosted;
-
-    var minute = 60;
-    var hour = minute * 60;
-    var day = hour * 24;
-    var week = day * 7;
-    var year = week * 52;
-
-    var output;
-
-    if(timeElapsed < minute){
-      output = Math.round(timeElapsed) + ' s';
-
-    }else if(timeElapsed < hour){
-      output = Math.round(timeElapsed / minute) + ' m';
-
-    }else if(timeElapsed < day){
-      output = Math.round(timeElapsed / hour) + ' h';
-
-    }else if(timeElapsed < week){
-      output = Math.round(timeElapsed / day) + ' d';
-
-    }else if(timeElapsed < year){
-      output = Math.round(timeElapsed / week) + ' w';
-
-    }else{
-      output = Math.round(timeElapsed / year) + ' y';
-    }
-
-    return output;
-  }
+  var timeline = utils.apiGet('statuses/home_timeline', { count: 5 });
+  var friends = utils.apiGet('friends/list', { count: 5 });
+  var messages = utils.apiGet('direct_messages', { count: 5 });
+  var sentMessages = utils.apiGet('direct_messages/sent', { count: 5 });
+  var account = utils.apiGet('account/verify_credentials');
 
 
-  var date = new Date();
+  Promise
+    .all([
+      account,
+      timeline,
+      friends,
+      messages,
+      sentMessages
+    ])
+    .then(function(data) {
 
-	var locals = {
-		title: 'Home'
-	};
+      data.forEach(function(request, i) {
 
-	var timeline = apiGet('statuses/home_timeline', {count: 20});
-	var friends = apiGet('friends/list', {count: 5});
-	var messages = apiGet('direct_messages', {count: 5});
+        if(i === 0) { // account
+
+          locals.name = request.name;
+          locals.screenName = request.screen_name;
+          locals.avatar = request.profile_image_url;
+        }
 
 
-	Promise
-		.all([timeline, friends, messages])
-		.then(function(data) {
+        if(i === 1) { // timeline
 
-			data
-				.forEach(function(request, i) {
+          locals.timeline = [];
 
-          if (i === 0) {
+          request.forEach(function(post) {
+            var text = utils.preserveTextLinks(post.text, ' ');
 
-            locals.timeline = [];
-
-            request.forEach(function(post){
-              var char = ' ';
-
-              var text = post.text.split(char).map(function(word){
-                if(/^https?:\/\//.test(word)){
-                  return '<a href="' + word + '" target="_blank">' + word + '</a>';
-                }
-
-                return word
-                  .replace('<', '&lt;')
-                  .replace('>', '&rt;')
-                  .replace('/', '&sol;')
-                  .replace('"', '&quot;')
-              })
-                .join(char);
-
-              locals.timeline.push({
-                name: post.user.name,
-                screenName: post.user.screen_name,
-                avatar: post.user.profile_image_url,
-                text: text,
-                retweeted: post.retweet_count,
-                favorited: post.favorited_count,
-                posted: timeSincePost(post.created_at, date.toUTCString())
-              });
+            locals.timeline.push({
+              name: post.user.name,
+              screenName: post.user.screen_name,
+              avatar: post.user.profile_image_url,
+              text: text,
+              retweeted: post.retweet_count,
+              favorited: post.favorite_count,
+              posted: utils.timeSincePost(post.created_at, date)
             });
-					}
+          });
+        }
 
-          if(i === 1){
 
-            locals.friends = [];
+        if(i === 2) { // friends
+
+          locals.friends = [];
+
+          request.users.forEach(function(friend) {
+
+            locals.friends.push({
+              name: friend.name,
+              screenName: friend.screen_name,
+              avatar: friend.profile_image_url
+            });
+          });
+        }
+
+
+        if(i === 3 || i === 4) { // messages
+
+          for(var j = 0; j < request.length; j++) {
+            var message = request[j];
+
+            if(i === 4 && j === 0) {
+              locals.latestChat = (message.sender.screen_name === locals.screenName) ?
+                message.recipient.screen_name :
+                message.sender.screen_name;
+            }
+
+            locals.messages.push({
+              sender: message.sender.screen_name,
+              recipient: message.recipient.screen_name,
+              text: message.text,
+              timestamp: Date.parse(message.created_at),
+              posted: utils.timeSincePost(message.created_at, date),
+              avatar: message.sender.profile_image_url
+            });
+          }
+        }
+      });
+
+
+      var allMessages =
+
+        locals.messages.slice()
+        .filter(function(message, i) {
+
+          if(locals.latestChat === message.recipient || locals.latestChat === message.sender) {
+            return message;
           }
 
-          if(i === 2){
+        }).sort(function(a, b) {
+          return a.timestamp - b.timestamp;
+        });
 
-            locals.messages = [];
-          }
-				});
 
-			res.render('home', locals);
-		});
+      locals.messages = allMessages.slice(allMessages.length - 5);
+
+      // console.log(locals);
+      res.render('home', locals);
+
+    }).catch(function(reason) {
+      res.render('error', reason);
+    });
 });
+
 
 module.exports = router;
