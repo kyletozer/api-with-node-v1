@@ -4,3 +4,4 @@ config.js
 example
 public/*
 !public/css
+npm-debug.log

@@ -1,1 +1,18 @@
-div 404 does not exist
+extends layout
+
+block title
+  include title
+
+block append styles
+  link(rel="stylesheet", href="css/bootstrap.min.css")
+
+block content
+  body(style="background:#1da1f2")
+    .container
+      .row
+        .col-sm-6.col-sm-offset-3.text-center(style="color:white")
+          h1 #{error.status}
+          h3(style="opacity:.6") #{error.message}
+
+          a(href="/")
+            p Return to Twitter feed

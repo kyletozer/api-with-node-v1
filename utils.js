@@ -1,9 +1,10 @@
 var Twit = require('twit');
-var T = new Twit(require('./config'));
+var T = new Twit(/* include config module in here */);
 
 
 module.exports = {
 
+  // create a new promise and handle the api call within that promise
   apiGet: function(endpoint, options) {
 		return new Promise(function(resolve, reject) {
 			T.get(endpoint, options, function(error, data, response) {
@@ -16,6 +17,19 @@ module.exports = {
 		});
 	},
 
+  apiPost: function(endpoint, options){
+    return new Promise(function(resolve, reject) {
+			T.post(endpoint, options, function(error, data, response) {
+					if (error) {
+            console.log(error);
+						return reject(error)
+					}
+					resolve(data);
+				});
+		});
+  },
+
+  // output readable post timestamps, acceptsUTC formatted time strings
   timeSincePost: function(datePosted, dateViewed){
 
     function toTimeStamp(dateString){
@@ -57,6 +71,7 @@ module.exports = {
     return output;
   },
 
+  // return the text from a tweet, wrapping links in anchor tags and escaping any additional html entities
   preserveTextLinks: function(textStr, char){
 
     return textStr.split(char).map(function(word){
